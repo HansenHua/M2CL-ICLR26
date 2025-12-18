@@ -24,8 +24,8 @@ class Config:
         self.process_num = args.process_num
         self.alpha = args.alpha
         self.beta = args.beta
-        self.model_path = '/home/huaxingyuan/agentic RL/Model/llama-7b'
-        self.generator_path = './t5-small'
+        self.model_path = args.model_path
+        self.generator_path = args.generator_path
         # training
         self.lr = 1e-3
         self.train_rounds = args.train_rounds
@@ -49,6 +49,8 @@ if __name__ == "__main__":
     parser.add_argument('--dataset', type=str, default='WinoGrande', help='the name of dataset')
     parser.add_argument('--method', type=str, default='M2CL', help='the name of method')
     parser.add_argument('--model', type=str, default='llama-7b', help='the name of model (gpt-4o/gpt-4o-mini/gpt-3.5-turbo/gpt-4-turbo/o1-mini)')
+    parser.add_argument('--model_path', type=str, default='./llama-7b', help='the path of model')
+    parser.add_argument('--generator_path', type=str, default='./llama-7b', help='the path of context generator')
     parser.add_argument('--num', type=int, default=int(2), help='the number of agents')
     parser.add_argument('--max_rounds', type=int, default=int(8), help='maximum debating rounds')
     parser.add_argument('--seed', type=int, default=int(0), help='random seed')
