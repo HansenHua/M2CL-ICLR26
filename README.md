@@ -21,7 +21,7 @@
 
 ## 🚀 Quick Start
 
-This guide provides instructions for setting up the M2CL, including execution scripts for sampling and training.
+This guide provides instructions for setting up the M2CL, including execution scripts for infering and training.
 
 ### 1. Preparation
 
