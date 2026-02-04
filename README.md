@@ -8,6 +8,7 @@
 </p>
 
 ## 📢 Updates
+- [2026-2-4] We open-source the code for training.
 - [2026-2-3] We publish the paper on arxiv.
 - [2026-1-26] This paper was accepted by ICLR'26
 
