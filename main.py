@@ -30,6 +30,7 @@ class Config:
         self.lr = 1e-3
         self.train_rounds = args.train_rounds
         self.alpha_init = 10.0
+        self.batch_size = 32
 
 def gen_api_key():
     dirname = os.path.dirname(__file__)
@@ -49,8 +50,8 @@ if __name__ == "__main__":
     parser.add_argument('--dataset', type=str, default='WinoGrande', help='the name of dataset')
     parser.add_argument('--method', type=str, default='M2CL', help='the name of method')
     parser.add_argument('--model', type=str, default='llama-7b', help='the name of model (gpt-4o/gpt-4o-mini/gpt-3.5-turbo/gpt-4-turbo/o1-mini)')
-    parser.add_argument('--model_path', type=str, default='./llama-7b', help='the path of model')
-    parser.add_argument('--generator_path', type=str, default='./llama-7b', help='the path of context generator')
+    parser.add_argument('--model_path', type=str, default='./model/llama-7b', help='the path of model')
+    parser.add_argument('--generator_path', type=str, default='./t5-small', help='the path of context generator')
     parser.add_argument('--num', type=int, default=int(2), help='the number of agents')
     parser.add_argument('--max_rounds', type=int, default=int(8), help='maximum debating rounds')
     parser.add_argument('--seed', type=int, default=int(0), help='random seed')
@@ -63,7 +64,6 @@ if __name__ == "__main__":
     parser.add_argument('--contribution_threshold', type=float, default=float(0.5), help='contribution threshold')
     parser.add_argument('--process_num', type=int, default=int(1), help='number of process')
     parser.add_argument('--train_rounds', type=int, default=int(1), help='maximum training rounds')
-    parser.add_argument('--model_path', type=str, default='./',help='model path')
     args = parser.parse_args()
     API_KEY = gen_api_key()
 
