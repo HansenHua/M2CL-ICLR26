@@ -292,23 +292,25 @@ class M2CL:
         self.agent_list[id].alpha_optimizer.step()
     
     def train_role(self, questions, F_model):
-        ppo_config = PPOConfig(
-            model_name='context_generator',
-            learning_rate=self.config.lr,
-            batch_size=self.config.batch_size,
-            mini_batch_size=self.config.batch_size,
-            gradient_accumulation_steps=1,
-            ppo_epochs=4,
-            cliprange=0.2,
-            cliprange_value=0.2,
-            vf_coef=0.1,
-        )
-        ppo_trainer_list = [PPOTrainer(
-            config=ppo_config,
-            model=self.agent_list[i].role_generator.t5_model,
-            ref_model=self.t5_model,
-            tokenizer=self.t5_tokenizer,
-        ) for i in range(len(self.agent_list))]
+        ppo_trainer_list = []
+        for i in range(len(self.agent_list)):
+            ppo_config = PPOConfig(
+                model_name=f'context_generator_{i}',
+                learning_rate=self.config.lr,
+                batch_size=self.config.batch_size,
+                mini_batch_size=self.config.batch_size,
+                gradient_accumulation_steps=1,
+                ppo_epochs=4,
+                cliprange=0.2,
+                cliprange_value=0.2,
+                vf_coef=0.1,
+            )
+            ppo_trainer_list.append(PPOTrainer(
+                config=ppo_config,
+                model=self.agent_list[i].role_generator.t5_model,
+                ref_model=self.t5_model,
+                tokenizer=self.t5_tokenizer,
+            ))
 
         for _ in range(self.config.train_rounds):
             query_buffer = [[]]*len(self.agent_list)
