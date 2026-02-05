@@ -1,4 +1,3 @@
-# https://platform.openai.com/docs/assistants/overview
 import os
 import openai
 from openai import OpenAI
@@ -8,7 +7,7 @@ import importlib
 import multiprocessing as mp
 import torch
 import torch.nn as nn
-from transformers import RobertaModel, RobertaTokenizer, T5Tokenizer, T5ForConditionalGeneration
+from transformers import T5Tokenizer, T5ForConditionalGeneration
 from transformers import LlamaTokenizer, LlamaForCausalLM
 import copy
 import random
@@ -16,6 +15,8 @@ import numpy as np
 import subprocess
 import itertools
 import torch.nn.functional as F
+import re
+from trl import PPOTrainer, PPOConfig
 
 class Scalar(nn.Module):
     def __init__(self, init_value: float):
@@ -97,20 +98,6 @@ def train_init(role_pool, questions, answers, t5_tokenizer, t5_model, tokenizer,
             optimzier_F.step()
     return F_model
 
-def split_list(lst, k):
-    avg_len = len(lst) // k
-    remainder = len(lst) % k
-
-    result = []
-    start = 0
-
-    for i in range(k):
-        end = start + avg_len + (1 if i < remainder else 0)
-        result.append(lst[start:end])
-        start = end
-
-    return result
-
 def sentence2vec(sentence, tokenizer, model):
     device = "cuda"
     inputs = tokenizer(sentence, return_tensors="pt").input_ids.to(device)
@@ -121,19 +108,23 @@ def sentence2vec(sentence, tokenizer, model):
     return sentence_vector
 
 def verify_answer(config, final_answer, answer):
-    if config == 'MMLU':
-        if '('+answer+')' in final_answer:
-            return True
-        else:
-            return False
-    elif config == 1:
-        final_answer = final_answer.replace("1 or 2", "")
-        if ('('+answer+')' in final_answer or answer+')' in final_answer or answer in final_answer) and ('('+str(3-int(answer))+')' not in final_answer and str(3-int(answer))+')' not in final_answer and str(3-int(answer)) not in final_answer):
-            return True
-        else:
-            return False
+    pattern = r'\\box(?:ed)?\s*\{([^}]*)\}'
+    matches = re.findall(pattern, final_answer)
+
+    if not matches:
+        return False
+
+    cleaned_answers = []
+    for m in matches:
+        m = m.strip()
+        if m.startswith('(') and m.endswith(')'):
+            m = m[1:-1]
+        cleaned_answers.append(m)
+
+    return str(answer) in cleaned_answers
 
 def gen_response(config, tokenizer, model, message, id=1):
+    return "success generate"
     if config.model in ['llama-7b','llama-14b','llama-70b','Qwen-7b','Qwen-13b','Qwen-70b']:
         m = ""
         for i in range(len(message)):
@@ -172,7 +163,6 @@ def gen_response(config, tokenizer, model, message, id=1):
             messages=message
         )
         return response.choices[0].message.content
-        
 
 def test_(config, F_model, model_method, questions, answers):
     correct = 0
@@ -190,43 +180,6 @@ def test(config, questions, answers):
     model_method.train_role(questions, F_model)
     correct = test_(config, F_model, model_method, questions, answers)
     return correct/len(questions)
-
-def cal_alpha_loss(alpha, r, r_b):
-    alpha_loss = - nn.MSELoss()(r, r_b.squeeze(dim=0)).detach() * alpha
-    return alpha_loss
-    
-def cal_loss(config, agent_list, id, tokenizer, model, questions, t5_tokenizer, t5_model):
-    response_list = ["" for _ in range(len(agent_list))]
-    for round in range(config.rounds):
-        response_list_ = copy.deepcopy(response_list)
-        for i in range(len(agent_list)):
-            responses = ""
-            for j in range(len(response_list_)):
-                if j == i:
-                    continue
-                responses += response_list_[j]
-            role, logits = agent_list[i].role_generator.gen_role(questions+responses)
-            message = role + responses + questions
-            response_list[i] = gen_response(config,tokenizer,model,message,0)
-            response_list[i].replace(message,"")
-            inputs = tokenizer(role+questions, return_tensors="pt").to('cuda')
-            outputs = model(**inputs, output_hidden_states=True)
-            hidden_states = outputs.hidden_states
-            a_r = torch.sum(hidden_states[-1].squeeze(dim=0),dim=0)
-            inputs = tokenizer(response_list[i]+questions, return_tensors="pt").to('cuda')
-            outputs = model(**inputs, output_hidden_states=True)
-            hidden_states = outputs.hidden_states
-            a_p = torch.sum(hidden_states[-1].squeeze(dim=0),dim=0)
-            l_1 = torch.sqrt(torch.mean((a_r- a_p) ** 2)) * 1e-3
-            l_2 = torch.sqrt(torch.mean((torch.sum(sentence2vec(role, t5_tokenizer, t5_model),dim=0) - torch.sum(sentence2vec(agent_list[i].base_role, t5_tokenizer, t5_model),dim=0)) ** 2))
-            l = (l_1.detach().to(logits.device) + l_2.detach().to(logits.device) * agent_list[i].alpha().to(logits.device)) * logits.squeeze(dim=0).sum(dim=0)
-            agent_list[i].role_generator.role_optimizer.zero_grad()
-            l.backward()
-            agent_list[i].role_generator.role_optimizer.step()
-            alpha_loss = cal_alpha_loss(agent_list[i].alpha(), torch.sum(sentence2vec(role, t5_tokenizer, t5_model),dim=0).detach(),sentence2vec(agent_list[i].base_role, t5_tokenizer, t5_model).detach())
-            agent_list[i].alpha_optimizer.zero_grad()
-            alpha_loss.backward()
-            agent_list[i].alpha_optimizer.step()
 
 class Agent:
     def __init__(self, config, role, t5_t, t5_m):
@@ -253,8 +206,8 @@ class Agent:
         r = gen_response(self.config, tokenizer, model, messages)
         return r
     
-    def set_role(self, question):
-        self.role, _ = self.role_generator.gen_role(question)
+    def set_role(self, context):
+        self.role, _ = self.role_generator.gen_role(context)
 
 class role_generator(nn.Module):
     def __init__(self, config, role, t5_t, t5_m):
@@ -266,35 +219,18 @@ class role_generator(nn.Module):
         self.seq_length = 10
         self.hidden_dim = 512
         self.base_role_vector = sentence2vec(self.base_role, self.t5_tokenizer, self.t5_model)
-        self.role_network = nn.Sequential(
-            nn.Linear(512, 256),
-            nn.ReLU(),
-            nn.Linear(256, 256),
-            nn.ReLU(),
-            nn.Linear(256, 256),
-            nn.ReLU(),
-            nn.Linear(256, 512)
+      
+    def gen_role(self, context):
+        inputs = self.t5_tokenizer(context, return_tensors="pt").to(self.t5_model.device)
+        output = self.t5_model.generate(
+            **inputs,
+            max_length=self.config.max_completion_tokens,
+            do_sample=True,
         )
-        self.role_network.to('cuda')
-        self.role_optimizer = torch.optim.Adam(self.role_network.parameters(), lr=self.config.lr)
-    
-    def forward(self, question):
-        q_vec = sentence2vec(question, self.t5_tokenizer, self.t5_model)
-        inputs = torch.concat([self.base_role_vector.to(q_vec.device), q_vec])
-        self.role_network.to(inputs.device)
-        hidden_states = self.role_network(inputs)
-        return hidden_states
-    
-    def gen_role(self, question):
-        hidden_states = self.forward(question)
-        hidden_states = hidden_states.unsqueeze(0)
-        generated = self.t5_model.generate(inputs_embeds=hidden_states, max_length=100,return_dict_in_generate=True,output_scores=True)
-        scores = generated.scores[0]
-        probs = [F.softmax(score, dim=-1) for score in scores]
-        probs = torch.stack(probs, dim=0)
-        role_ids = list(itertools.chain.from_iterable(generated[0]))
-        role = self.t5_tokenizer.decode(role_ids, skip_special_tokens=True)
-        return role, probs
+        role_text = self.t5_tokenizer.decode(
+            output[0], skip_special_tokens=True
+        )
+        return role_text, output
 
 class M2CL:
     def __init__(self, config):
@@ -309,14 +245,98 @@ class M2CL:
         self.agent_list = [Agent(self.config, "", self.t5_tokenizer, self.t5_model) for i in range(config.num)]
         self.base_role = self.config.client_expert
     
+    def gen_reward(self, agent, role, question, response):
+        inputs = self.tokenizer(role+question, return_tensors="pt").to('cuda')
+        outputs = self.model(**inputs, output_hidden_states=True)
+        hidden_states = outputs.hidden_states
+        a_i = torch.sum(hidden_states[-1].squeeze(dim=0),dim=0)
+        inputs = self.tokenizer(response+question, return_tensors="pt").to('cuda')
+        outputs = self.model(**inputs, output_hidden_states=True)
+        hidden_states = outputs.hidden_states
+        a_x = torch.sum(hidden_states[-1].squeeze(dim=0),dim=0)
+        r_1 = torch.sqrt(torch.mean((torch.sum(sentence2vec(role, self.t5_tokenizer, self.t5_model),dim=0) - torch.sum(sentence2vec(agent.base_role, self.t5_tokenizer, self.t5_model),dim=0)) ** 2))
+        r_2 = torch.sqrt(torch.mean((a_i- a_x) ** 2))
+        reward = r_1.detach()*agent.alpha()+r_2.detach()
+        return reward
+        
+    def sample(self, question):
+        context_buffer = [[]]*len(self.agent_list)
+        response_buffer = [[]]*len(self.agent_list)
+        role_buffer = [[]]*len(self.agent_list)
+        reward_buffer = [[]]*len(self.agent_list)
+        response_list = ["" for _ in range(len(self.agent_list))]
+        for _ in range(self.config.rounds):
+            response_list_ = copy.deepcopy(response_list)
+            for i in range(len(self.agent_list)):
+                responses = ""
+                for j in range(len(response_list_)):
+                    if j == i:
+                        continue
+                    responses += response_list_[j]
+                role, logits = self.agent_list[i].role_generator.gen_role(question+responses)
+                message = role + responses + question
+                response_list[i] = gen_response(self.config,self.tokenizer,self.model,message,0)
+                response_list[i].replace(message,"")
+                reward = self.gen_reward(self.agent_list[i], role, question, response_list_[i])
+                context_buffer[i].append(question+responses)
+                role_buffer[i].append(role)
+                response_buffer[i].append(logits)
+                reward_buffer[i].append(reward)
+        
+        return context_buffer, response_buffer, role_buffer, reward_buffer
+    
+    def train_alpha(self, id, role_buffer):
+        alpha_loss = (self.config.beta - nn.MSELoss()(torch.sum(sentence2vec(role_buffer[id], self.t5_tokenizer, self.t5_model),dim=0).detach(), sentence2vec(self.agent_list[id].base_role, self.t5_tokenizer, self.t5_model).detach()).detach()) * self.agent_list[id].alpha()
+        self.agent_list[id].alpha_optimizer.zero_grad()
+        alpha_loss.backward()
+        self.agent_list[id].alpha_optimizer.step()
+    
     def train_role(self, questions, F_model):
+        ppo_config = PPOConfig(
+            model_name='context_generator',
+            learning_rate=self.config.lr,
+            batch_size=self.config.batch_size,
+            mini_batch_size=self.config.batch_size,
+            gradient_accumulation_steps=1,
+            ppo_epochs=4,
+            cliprange=0.2,
+            cliprange_value=0.2,
+            vf_coef=0.1,
+        )
+        ppo_trainer_list = [PPOTrainer(
+            config=ppo_config,
+            model=self.agent_list[i].role_generator.t5_model,
+            ref_model=self.t5_model,
+            tokenizer=self.t5_tokenizer,
+        ) for i in range(len(self.agent_list))]
+
         for _ in range(self.config.train_rounds):
-            i = random.randint(0,len(questions)-1)
-            question = questions[i]
-            role_list = init_role(self.config.client_expert,question,F_model,len(self.agent_list), self.t5_tokenizer, self.t5_model)
-            for i, agent in enumerate(self.agent_list):
-                agent.role = role_list[i]
-            cal_loss(self.config, self.agent_list, id, self.tokenizer, self.model, question, self.t5_tokenizer, self.t5_model)
+            query_buffer = [[]]*len(self.agent_list)
+            response_buffer = [[]]*len(self.agent_list)
+            role_buffer = [[]]*len(self.agent_list)
+            reward_buffer = [[]]*len(self.agent_list)
+            question_batch = random.sample(questions, self.config.batch_size)
+            for question in question_batch:
+                role_list = init_role(self.config.client_expert,question,F_model,len(self.agent_list), self.t5_tokenizer, self.t5_model)
+                for i, agent in enumerate(self.agent_list):
+                    agent.role = role_list[i]
+                query, respose, role, reward = self.sample(question)
+                for i in range(len(self.agent_list)):
+                    query_buffer[i]+=query[i]
+                    response_buffer[i]+=respose[i]
+                    reward_buffer[i]+=reward[i]
+                    role_buffer[i]+=role[i]
+                    responses = torch.stack(response_buffer[i], dim=0)
+
+                    ppo_trainer_list[i].step(
+                        query_buffer[i],
+                        responses,
+                        reward_buffer[i],
+                    )
+                    self.train_alpha(i, role_buffer)
+            query_buffer.clear()
+            response_buffer.clear()
+            reward_buffer.clear()
 
     
     def set_role(self, question, response_list):
