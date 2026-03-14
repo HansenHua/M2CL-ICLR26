@@ -1,6 +1,6 @@
 # Context Learning for Multi-Agent Discussion
 <p align="center">
-&nbsp&nbsp🌐 <a href="">Website</a>&nbsp&nbsp | &nbsp&nbsp📑 <a href="https://arxiv.org/abs/2602.02350">arXiv</a>&nbsp&nbsp | &nbsp&nbsp🤖 <a href="">Model</a>&nbsp&nbsp | &nbsp&nbsp🤗 <a href="https://huggingface.co/papers/2602.02350">Hugging Face</a>&nbsp&nbsp
+&nbsp&nbsp🌐 <a href="https://xingyuan-project.github.io/m2cl.github.io/">Website</a>&nbsp&nbsp | &nbsp&nbsp📑 <a href="https://arxiv.org/abs/2602.02350">arXiv</a>&nbsp&nbsp | &nbsp&nbsp🤖 <a href="">Model</a>&nbsp&nbsp | &nbsp&nbsp🤗 <a href="https://huggingface.co/papers/2602.02350">Hugging Face</a>&nbsp&nbsp
 </p>
 
 <p align="center">
@@ -8,6 +8,7 @@
 </p>
 
 ## 📢 Updates
+- [2026-3-14] We publish the project page.
 - [2026-2-5] We publish the paper on huggingface.
 - [2026-2-4] We open-source the code for training.
 - [2026-2-3] We publish the paper on arxiv.
