@@ -17,8 +17,7 @@
 ## 🔨 TODO
 - [ ] Polish the codebase.
 - [ ] Merge with the latest verl version.
-- [ ] Release the model checkpoint for initialization and generator.
-- [ ] Add the training code and pipeline.
+- [ ] Release the model checkpoint for initialization and generator (we will release all the models by the end of this month).
 
 ## 🚀 Quick Start
 
