@@ -101,11 +101,11 @@ The code allows for
 If you find our paper and code useful in your research, please consider giving a star ⭐ and citation 📝 :)
 
 ```bibtex
-@article{hua2026context,
-  title = {Context Learning for Multi-Agent Discussion},
-  author={Hua, Xingyuan and Yue, Sheng and Li, Xinyi and Zhao, Yizhe and Zhang, Jinrui and Ren Ju},
-  journal={arXiv preprint arXiv:2602.02350},
-  year={2026}
-  url = {https://arxiv.org/abs/2602.02350}
+@inproceedings{
+hua2026context,
+title={Context Learning for Multi-Agent Discussion},
+author={Xingyuan Hua and Sheng Yue and Xinyi Li and Yizhe Zhao and Jinrui Zhang and Ju Ren},
+booktitle={The Fourteenth International Conference on Learning Representations},
+year={2026}
 }
 ```
